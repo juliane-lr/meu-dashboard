@@ -1,33 +1,40 @@
-📊 Dashboard Interativo
+# 📅 Por Onde Começo Hoje?
 
-Dashboard desenvolvido com abordagem de Vibe Coding, utilizando Inteligência Artificial como ferramenta de apoio ao desenvolvimento. O projeto teve como objetivo criar uma interface moderna e responsiva para visualização de indicadores, colocando em prática conceitos de desenvolvimento front-end, organização de informações e experiência do usuário.
+Aplicação web desenvolvida utilizando a abordagem de **Vibe Coding**, com apoio de Inteligência Artificial, para centralizar informações do dia em uma única interface.
 
-Durante o desenvolvimento, a IA foi utilizada para acelerar a implementação, enquanto as decisões sobre funcionalidades, validação dos resultados, ajustes de layout e refinamento da aplicação foram conduzidas de forma iterativa.
+O projeto integra as APIs do Google para reunir compromissos do Google Calendar, tarefas e acesso ao Gmail, permitindo visualizar rapidamente a agenda, pendências e principais ações do dia.
 
-✨ Funcionalidades:
-Visualização de indicadores em dashboard interativo, 
-Interface responsiva, 
-Organização das informações em cards, 
-Componentes visuais para facilitar a interpretação dos dados,
-Layout moderno e focado em usabilidade
+## Objetivo
 
-🛠 Tecnologias utilizadas:
-HTML5, 
-CSS3, 
-JavaScript, 
-Git, 
-GitHub, 
-Inteligência Artificial (Vibe Coding)
+Criar uma página inicial personalizada que ajude o usuário a organizar sua rotina, reduzindo a necessidade de alternar entre diferentes aplicações para consultar e-mails, agenda e tarefas.
 
-💡 O que pratiquei neste projeto:
-Estruturação de interfaces web, 
-Organização de componentes visuais, 
-Desenvolvimento assistido por IA, 
-Refinamento iterativo de funcionalidades, 
-Versionamento com Git e GitHub, 
-Engenharia de prompts para desenvolvimento
+## Funcionalidades
 
+* Integração com Google Calendar.
+* Integração com Gmail.
+* Integração com Google Tasks.
+* Resumo diário com indicadores.
+* Interface responsiva.
+* Desenvolvimento assistido por Inteligência Artificial (Vibe Coding).
 
-📚 Referência:
+## Tecnologias
 
-Este projeto foi desenvolvido como prática baseada no curso Vibe Coding, de Gabi Surita, aplicando o uso de IA como apoio ao desenvolvimento de software, durante o programa Sprint IA no trabalho, por PrograMaria.
+* HTML5
+* CSS3
+* JavaScript
+* Google Calendar API
+* Gmail API
+* OAuth2
+* Git
+* GitHub
+
+## Aprendizados
+
+Durante este projeto pratiquei:
+
+* integração entre aplicações utilizando APIs do Google;
+* autenticação OAuth2;
+* desenvolvimento front-end;
+* engenharia de prompts;
+* desenvolvimento iterativo com IA;
+* organização de interfaces voltadas para experiência do usuário.
