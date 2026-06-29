@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Dashboard de início de dia — visualize emails, reuniões e tarefas pendentes ao chegar no trabalho." />
+  <title>Por onde começo hoje?</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Google Identity Services + GAPI -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+
+  <style>
+    /* ─── Design Tokens ─────────────────────────────────────────────────── */
+    :root {
+      --bg-base:        #0d0f14;
+      --bg-surface:     #13161e;
+      --bg-card:        #1a1e2a;
+      --bg-card-hover:  #202535;
+      --border:         rgba(255,255,255,0.07);
+      --border-glow:    rgba(139,92,246,0.4);
+
+      --accent-purple:  #8b5cf6;
+      --accent-violet:  #7c3aed;
+      --accent-blue:    #3b82f6;
+      --accent-cyan:    #06b6d4;
+      --accent-pink:    #ec4899;
+      --accent-amber:   #f59e0b;
+
+      --text-primary:   #f0f2f8;
+      --text-secondary: #8b91a7;
+      --text-muted:     #4b5168;
+
+      --radius-card:    20px;
+      --radius-pill:    999px;
+
+      --shadow-card: 0 4px 24px rgba(0,0,0,0.4);
+      --shadow-glow: 0 0 40px rgba(139,92,246,0.15);
+    }
+
+    /* ─── Reset ─────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* ─── Background grid & glow ────────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 500px;
+      background: radial-gradient(ellipse, rgba(139,92,246,0.18) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── Layout wrapper ────────────────────────────────────────────────── */
+    .page {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+    }
+
+    /* ─── Header ────────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 56px;
+    }
+
+    .header__badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      background: rgba(139,92,246,0.12);
+      border: 1px solid rgba(139,92,246,0.25);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--accent-purple);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .header__badge::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-purple);
+      box-shadow: 0 0 8px var(--accent-purple);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .header__title {
+      font-size: clamp(2rem, 5vw, 3.25rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--text-primary) 40%, var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header__date {
+      font-size: 15px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      letter-spacing: 0.02em;
+    }
+
+    .header__date span {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* ─── Section label ─────────────────────────────────────────────────── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    /* ─── Cards grid ────────────────────────────────────────────────────── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    /* ─── Summary Card ──────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+      cursor: default;
+      transition:
+        transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+        border-color 0.3s ease,
+        box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-6px) scale(1.01);
+      border-color: var(--border-glow);
+      box-shadow: var(--shadow-card), var(--shadow-glow);
+    }
+
+    /* per-card accent glow */
+    .card::before {
+      content: '';
+      position: absolute;
+      top: -60px;
+      right: -60px;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      opacity: 0.12;
+      transition: opacity 0.3s ease;
+    }
+    .card:hover::before { opacity: 0.22; }
+
+    .card--email::before   { background: var(--accent-blue); }
+    .card--meeting::before { background: var(--accent-pink); }
+    .card--tasks::before   { background: var(--accent-amber); }
+
+    /* top bar accent */
+    .card__accent-bar {
+      position: absolute;
+      top: 0; left: 32px;
+      width: 48px; height: 3px;
+      border-radius: 0 0 4px 4px;
+    }
+    .card--email   .card__accent-bar { background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan)); }
+    .card--meeting .card__accent-bar { background: linear-gradient(90deg, var(--accent-pink), var(--accent-purple)); }
+    .card--tasks   .card__accent-bar { background: linear-gradient(90deg, var(--accent-amber), #f97316); }
+
+    /* icon wrapper */
+    .card__icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      font-size: 22px;
+      line-height: 1;
+    }
+    .card--email   .card__icon { background: rgba(59,130,246,0.15);  color: var(--accent-blue); }
+    .card--meeting .card__icon { background: rgba(236,72,153,0.15);  color: var(--accent-pink); }
+    .card--tasks   .card__icon { background: rgba(245,158,11,0.15);  color: var(--accent-amber); }
+
+    .card__label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .card__number {
+      font-size: clamp(3rem, 7vw, 4.5rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+    .card--email   .card__number { color: var(--accent-blue); }
+    .card--meeting .card__number { color: var(--accent-pink); }
+    .card--tasks   .card__number { color: var(--accent-amber); }
+
+    .card__sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card__sub-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .card--email   .card__sub-dot { background: var(--accent-blue); }
+    .card--meeting .card__sub-dot { background: var(--accent-pink); }
+    .card--tasks   .card__sub-dot { background: var(--accent-amber); }
+
+    /* ─── Chart card ─────────────────────────────────────────────────────── */
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 32px;
+      margin-top: 24px;
+      position: relative;
+      overflow: hidden;
+      transition:
+        border-color 0.3s ease,
+        box-shadow 0.3s ease;
+    }
+
+    .chart-card:hover {
+      border-color: var(--border-glow);
+      box-shadow: var(--shadow-card), var(--shadow-glow);
+    }
+
+    .chart-card::before {
+      content: '';
+      position: absolute;
+      top: -80px; right: -80px;
+      width: 260px; height: 260px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      opacity: 0.05;
+      pointer-events: none;
+    }
+
+    .chart-card__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .chart-card__title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .chart-card__icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: rgba(59,130,246,0.12);
+    }
+
+    .chart-card__title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .chart-card__subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .chart-card__badge {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent-blue);
+      background: rgba(59,130,246,0.1);
+      border: 1px solid rgba(59,130,246,0.2);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 220px;
+    }
+
+    /* ─── Agenda ─────────────────────────────────────────────────────────── */
+    .agenda-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 32px;
+      margin-top: 24px;
+      position: relative;
+      overflow: hidden;
+      transition:
+        border-color 0.3s ease,
+        box-shadow 0.3s ease;
+    }
+
+    .agenda-card:hover {
+      border-color: var(--border-glow);
+      box-shadow: var(--shadow-card), var(--shadow-glow);
+    }
+
+    .agenda-card::before {
+      content: '';
+      position: absolute;
+      top: -80px; right: -80px;
+      width: 260px; height: 260px;
+      border-radius: 50%;
+      background: var(--accent-pink);
+      opacity: 0.04;
+      pointer-events: none;
+    }
+
+    .agenda-card__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .agenda-card__title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .agenda-card__icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: rgba(236,72,153,0.12);
+    }
+
+    .agenda-card__title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .agenda-card__subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .agenda-card__badge {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent-pink);
+      background: rgba(236,72,153,0.1);
+      border: 1px solid rgba(236,72,153,0.2);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+    }
+
+    /* Event list */
+    .agenda-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .agenda-item {
+      display: grid;
+      grid-template-columns: 72px 36px 1fr auto;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 0;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      transition: background 0.2s ease;
+    }
+
+    .agenda-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .agenda-item:first-child {
+      padding-top: 0;
+    }
+
+    /* hover highlight */
+    .agenda-item::before {
+      content: '';
+      position: absolute;
+      inset: 0 -32px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 10px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .agenda-item:hover::before { opacity: 1; }
+
+    .agenda-item__time {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      letter-spacing: 0.04em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .agenda-item__cal-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(236,72,153,0.1);
+      border: 1px solid rgba(236,72,153,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .agenda-item__body {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .agenda-item__title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .agenda-item__duration {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .agenda-item__duration::before {
+      content: '';
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .agenda-item__status {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .status--now {
+      color: #34d399;
+      background: rgba(52,211,153,0.12);
+      border: 1px solid rgba(52,211,153,0.25);
+    }
+
+    .status--next {
+      color: var(--accent-amber);
+      background: rgba(245,158,11,0.12);
+      border: 1px solid rgba(245,158,11,0.25);
+    }
+
+    .status--done {
+      color: var(--text-muted);
+      background: rgba(75,81,104,0.2);
+      border: 1px solid rgba(75,81,104,0.2);
+      text-decoration: line-through;
+    }
+
+    .status--scheduled {
+      color: var(--text-secondary);
+      background: rgba(139,145,167,0.1);
+      border: 1px solid rgba(139,145,167,0.15);
+    }
+
+    @media (max-width: 520px) {
+      .agenda-item {
+        grid-template-columns: 60px 32px 1fr;
+      }
+      .agenda-item__status { display: none; }
+    }
+
+    /* ─── Divider ───────────────────────────────────────────────────────── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 56px 0 48px;
+    }
+
+    /* ─── Quick tip ─────────────────────────────────────────────────────── */
+    #tip-section {
+      margin-top: 32px;
+    }
+    .tip {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent-purple);
+      border-radius: 12px;
+      padding: 18px 22px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .tip__icon {
+      font-size: 20px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .tip__body {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .tip__heading {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent-purple);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .tip__text {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ─── Habits weekly tracker ──────────────────────────────────────────── */
+    .habits-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .habits-card:hover {
+      border-color: var(--border-glow);
+      box-shadow: var(--shadow-card), var(--shadow-glow);
+    }
+
+    .habits-card::before {
+      content: '';
+      position: absolute;
+      top: -80px; right: -80px;
+      width: 260px; height: 260px;
+      border-radius: 50%;
+      background: #34d399;
+      opacity: 0.04;
+      pointer-events: none;
+    }
+
+    .habits-card__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .habits-card__title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .habits-card__icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: rgba(52,211,153,0.12);
+    }
+
+    .habits-card__title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .habits-card__subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* Progress bar */
+    .habits-progress {
+      margin-bottom: 24px;
+    }
+
+    .habits-progress__labels {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .habits-progress__text {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .habits-progress__count {
+      font-size: 12px;
+      font-weight: 700;
+      color: #34d399;
+    }
+
+    .habits-progress__track {
+      height: 6px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .habits-progress__fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #34d399, #06b6d4);
+      transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      width: 0%;
+    }
+
+    /* Habit items */
+    .habits-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .habit-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .habit-item:hover {
+      background: rgba(255,255,255,0.03);
+    }
+
+    /* Hidden native checkbox */
+    .habit-item input[type="checkbox"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    /* Custom checkbox */
+    .habit-item__box {
+      width: 22px;
+      height: 22px;
+      border-radius: 7px;
+      border: 1.5px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.04);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition:
+        background 0.25s ease,
+        border-color 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .habit-item__box svg {
+      width: 12px;
+      height: 12px;
+      stroke: #fff;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      opacity: 0;
+      transform: scale(0.5);
+      transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .habit-item.is-done .habit-item__box {
+      background: linear-gradient(135deg, #34d399, #06b6d4);
+      border-color: transparent;
+      box-shadow: 0 0 12px rgba(52,211,153,0.4);
+      transform: scale(1.08);
+    }
+
+    .habit-item.is-done .habit-item__box svg {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .habit-item__emoji {
+      font-size: 20px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .habit-item.is-done .habit-item__emoji {
+      transform: scale(1.15);
+    }
+
+    .habit-item__body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .habit-item__label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      transition: color 0.25s ease, text-decoration 0.25s ease;
+    }
+
+    .habit-item.is-done .habit-item__label {
+      color: var(--text-muted);
+      text-decoration: line-through;
+    }
+
+    .habit-item__hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Day-tab strip */
+    .habits-days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+
+    .habits-day-tab {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 4px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .habits-day-tab:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.12);
+      transform: translateY(-2px);
+    }
+
+    .habits-day-tab__name {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      transition: color 0.2s ease;
+    }
+
+    .habits-day-tab__dots {
+      display: flex;
+      gap: 3px;
+      height: 6px;
+      align-items: center;
+    }
+
+    /* Active tab */
+    .habits-day-tab.is-active {
+      background: rgba(52,211,153,0.1);
+      border-color: rgba(52,211,153,0.3);
+    }
+
+    .habits-day-tab.is-active .habits-day-tab__name {
+      color: #34d399;
+    }
+
+    /* Today's tab extra ring */
+    .habits-day-tab.is-today {
+      position: relative;
+    }
+
+    .habits-day-tab.is-today::after {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 14px;
+      border: 1.5px solid rgba(52,211,153,0.35);
+      pointer-events: none;
+    }
+
+    /* Progress dots */
+    .habits-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+
+    .habits-dot--done {
+      background: #34d399;
+      transform: scale(1.1);
+    }
+
+    /* Week total badge */
+    .habits-week-total {
+      font-size: 12px;
+      font-weight: 700;
+      color: #34d399;
+      background: rgba(52,211,153,0.1);
+      border: 1px solid rgba(52,211,153,0.2);
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+    }
+
+    /* Panels */
+    .habits-panel {
+      animation: fadeInPanel 0.2s ease;
+    }
+
+    @keyframes fadeInPanel {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 600px) {
+      .habits-days { gap: 4px; }
+      .habits-day-tab { padding: 8px 2px 6px; border-radius: 10px; }
+      .habits-day-tab__name { font-size: 10px; }
+      .habits-dot { width: 4px; height: 4px; }
+    }
+
+    /* ─── Footer ────────────────────────────────────────────────────────── */
+    .footer {
+      text-align: center;
+      margin-top: 64px;
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+
+    /* ─── Responsive ────────────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .page { padding: 32px 16px 48px; }
+      .header { margin-bottom: 40px; }
+      .card  { padding: 24px; }
+      .divider { margin: 40px 0 36px; }
+    }
+    /* ─── Login Overlay ──────────────────────────────────────────────────── */
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at 50% 30%, rgba(139,92,246,0.15) 0%, transparent 65%), #0d0f14;
+      backdrop-filter: blur(0px);
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+
+    .login-overlay.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .login-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(139,92,246,0.25);
+      border-radius: 28px;
+      padding: 52px 48px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(139,92,246,0.1);
+      animation: loginCardIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+
+    @keyframes loginCardIn {
+      from { transform: translateY(32px) scale(0.95); opacity: 0; }
+      to   { transform: translateY(0) scale(1);      opacity: 1; }
+    }
+
+    .login-card__logo {
+      font-size: 52px;
+      margin-bottom: 20px;
+      display: block;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-6px); }
+    }
+
+    .login-card__title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--text-primary) 40%, var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+
+    .login-card__sub {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 36px;
+      line-height: 1.5;
+    }
+
+    .btn-google {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 24px;
+      background: #fff;
+      color: #1f1f1f;
+      border: none;
+      border-radius: 12px;
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s ease;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+
+    .btn-google:hover {
+      transform: translateY(-2px) scale(1.01);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .btn-google:active { transform: scale(0.98); }
+
+    .btn-google svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+    .login-card__note {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 20px;
+      line-height: 1.5;
+    }
+
+    /* ─── User profile (header) ────────────────────────────────────────── */
+    .header-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      padding: 6px 14px 6px 6px;
+      flex-shrink: 0;
+    }
+
+    .user-profile__avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(139,92,246,0.3);
+    }
+
+    .user-profile__avatar-placeholder {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .user-profile__name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .btn-logout {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      padding: 0;
+      transition: color 0.2s ease;
+    }
+
+    .btn-logout:hover { color: var(--text-secondary); }
+
+    /* Loading state for cards */
+    .card__number.is-loading {
+      background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      color: transparent !important;
+      border-radius: 8px;
+      min-width: 60px;
+      height: 56px;
+      display: block;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+  </style>
+</head>
+<body>
+
+<!-- ── Login Overlay ── -->
+<div id="login-overlay" class="login-overlay" role="dialog" aria-modal="true" aria-label="Entrar no dashboard">
+  <div class="login-card">
+    <span class="login-card__logo" aria-hidden="true">🚀</span>
+    <h1 class="login-card__title">Por onde começo hoje?</h1>
+    <p class="login-card__sub">Entre com sua conta Google para ver suas reuniões e tarefas reais do dia.</p>
+
+    <button class="btn-google" id="btn-google-login" aria-label="Entrar com Google">
+      <!-- Google logo SVG -->
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Entrar com Google
+    </button>
+
+    <p class="login-card__note">Serão solicitados apenas acessos ao Google Calendar e Google Tasks. Nenhum dado é armazenado externamente.</p>
+  </div>
+</div>
+
+<main class="page" id="main-content" role="main">
+
+  <!-- ── Header ── -->
+  <header class="header" id="header">
+    <div class="header-row">
+      <div id="status-badge" class="header__badge">Dia de trabalho</div>
+      <!-- User profile slot (populated after login) -->
+      <div id="user-profile-slot" style="display:none">
+        <div class="user-profile" id="user-profile">
+          <div class="user-profile__avatar-placeholder" id="user-avatar-placeholder"></div>
+          <span class="user-profile__name" id="user-name"></span>
+          <button class="btn-logout" id="btn-logout" aria-label="Sair">Sair</button>
+        </div>
+      </div>
+    </div>
+
+    <h1 class="header__title" id="page-title">Por onde começo hoje?</h1>
+
+    <p class="header__date" id="current-date">
+      Sábado, <span>07 de junho de 2025</span>
+    </p>
+  </header>
+
+  <!-- ── Summary Cards ── -->
+  <section aria-labelledby="summary-label">
+    <p class="section-label" id="summary-label">Resumo do dia</p>
+
+    <div class="cards-grid" role="list">
+
+      <!-- Card: Emails -->
+      <a href="https://mail.google.com" target="_blank" rel="noopener noreferrer" class="card card--email" role="listitem" aria-label="Ver e-mails no Gmail" style="text-decoration: none; display: block;">
+        <div class="card__accent-bar" aria-hidden="true"></div>
+        <div class="card__icon" aria-hidden="true">✉️</div>
+        <p class="card__label">Gmail</p>
+        <p class="card__number" style="font-size: 32px;">Ver e-mails ↗</p>
+        <p class="card__sub">
+          <span class="card__sub-dot" aria-hidden="true"></span>
+          Ir para a caixa de entrada
+        </p>
+      </a>
+
+      <!-- Card: Reuniões -->
+      <article class="card card--meeting" role="listitem" aria-label="Reuniões hoje">
+        <div class="card__accent-bar" aria-hidden="true"></div>
+        <div class="card__icon" aria-hidden="true">📅</div>
+        <p class="card__label">Reuniões hoje</p>
+        <p class="card__number" id="meeting-count">—</p>
+        <p class="card__sub" id="meeting-sub">
+          <span class="card__sub-dot" aria-hidden="true"></span>
+          Entre para ver seus dados reais
+        </p>
+      </article>
+
+      <!-- Card: Tarefas -->
+      <article class="card card--tasks" role="listitem" aria-label="Tarefas pendentes">
+        <div class="card__accent-bar" aria-hidden="true"></div>
+        <div class="card__icon" aria-hidden="true">✅</div>
+        <p class="card__label">Tarefas pendentes</p>
+        <p class="card__number" id="task-count">—</p>
+        <p class="card__sub" id="task-sub">
+          <span class="card__sub-dot" aria-hidden="true"></span>
+          Entre para ver seus dados reais
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ── Quick Tip ── -->
+  <section aria-label="Dica do dia" id="tip-section">
+    <div class="tip" role="note">
+      <span class="tip__icon" aria-hidden="true">💡</span>
+      <div class="tip__body">
+        <p class="tip__heading">Dica de produtividade</p>
+        <p class="tip__text">
+          Comece pelos emails urgentes, confirme sua presença nas reuniões e defina
+          qual tarefa vai concluir <strong>antes do almoço</strong>. Pequenas vitórias
+          constroem um dia produtivo.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Agenda de hoje ── -->
+  <section aria-labelledby="agenda-label" id="agenda-section">
+    <div class="agenda-card">
+      <div class="agenda-card__header">
+        <div class="agenda-card__title-group">
+          <div class="agenda-card__icon" aria-hidden="true">🗓️</div>
+          <div>
+            <p class="agenda-card__title" id="agenda-label">Agenda de hoje</p>
+            <p class="agenda-card__subtitle">Entre para ver seus eventos reais</p>
+          </div>
+        </div>
+        <span class="agenda-card__badge">— eventos</span>
+      </div>
+
+      <ol class="agenda-list" aria-label="Lista de eventos do dia">
+        <li style="padding:24px 0;color:var(--text-muted);font-size:14px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">🔒</span> Faça login para ver seus eventos reais
+        </li>
+
+      </ol>
+    </div>
+  </section>
+
+  <!-- ── Lista de Tarefas ── -->
+  <section aria-labelledby="tasks-list-label" id="tasks-list-section" style="margin-top: 24px;">
+    <div class="agenda-card">
+      <div class="agenda-card__header">
+        <div class="agenda-card__title-group">
+          <div class="agenda-card__icon" aria-hidden="true">✅</div>
+          <div>
+            <p class="agenda-card__title" id="tasks-list-label">Tarefas pendentes</p>
+            <p class="tasks-list-subtitle" style="font-size:12px;color:var(--text-secondary);margin-top:2px">Entre para ver suas tarefas</p>
+          </div>
+        </div>
+        <span class="tasks-list-badge" style="background:rgba(139,92,246,0.15);color:var(--accent-purple);font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px">— tarefas</span>
+      </div>
+
+      <ul class="tasks-actual-list" style="list-style:none;margin-top:16px;display:flex;flex-direction:column;gap:12px" aria-label="Lista de tarefas pendentes">
+        <li style="padding:24px 0;color:var(--text-muted);font-size:14px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">🔒</span> Faça login para ver suas tarefas reais
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="divider" aria-hidden="true" />
+
+  <!-- ── Hábitos da semana ── -->
+  <section aria-labelledby="habits-label" id="habits-section">
+    <div class="habits-card">
+
+      <!-- Cabeçalho -->
+      <div class="habits-card__header">
+        <div class="habits-card__title-group">
+          <div class="habits-card__icon" aria-hidden="true">🌿</div>
+          <div>
+            <p class="habits-card__title" id="habits-label">Hábitos da semana</p>
+            <p class="habits-card__subtitle" id="habits-subtitle">Marque o que já fez hoje</p>
+          </div>
+        </div>
+        <!-- Progresso semanal total -->
+        <span class="habits-week-total" id="habits-week-total" aria-live="polite">0 / 35</span>
+      </div>
+
+      <!-- Abas dos dias -->
+      <div class="habits-days" role="tablist" aria-label="Dias da semana">
+        <button class="habits-day-tab" role="tab" data-day="1" id="tab-1" aria-controls="panel-1" aria-selected="false">
+          <span class="habits-day-tab__name">Seg</span>
+          <span class="habits-day-tab__dots" id="dots-1" aria-hidden="true"></span>
+        </button>
+        <button class="habits-day-tab" role="tab" data-day="2" id="tab-2" aria-controls="panel-2" aria-selected="false">
+          <span class="habits-day-tab__name">Ter</span>
+          <span class="habits-day-tab__dots" id="dots-2" aria-hidden="true"></span>
+        </button>
+        <button class="habits-day-tab" role="tab" data-day="3" id="tab-3" aria-controls="panel-3" aria-selected="false">
+          <span class="habits-day-tab__name">Qua</span>
+          <span class="habits-day-tab__dots" id="dots-3" aria-hidden="true"></span>
+        </button>
+        <button class="habits-day-tab" role="tab" data-day="4" id="tab-4" aria-controls="panel-4" aria-selected="false">
+          <span class="habits-day-tab__name">Qui</span>
+          <span class="habits-day-tab__dots" id="dots-4" aria-hidden="true"></span>
+        </button>
+        <button class="habits-day-tab" role="tab" data-day="5" id="tab-5" aria-controls="panel-5" aria-selected="false">
+          <span class="habits-day-tab__name">Sex</span>
+          <span class="habits-day-tab__dots" id="dots-5" aria-hidden="true"></span>
+        </button>
+        <button class="habits-day-tab" role="tab" data-day="6" id="tab-6" aria-controls="panel-6" aria-selected="false">
+          <span class="habits-day-tab__name">Sáb</span>
+          <span class="habits-day-tab__dots" id="dots-6" aria-hidden="true"></span>
+        </button>
+        <button class="habits-day-tab" role="tab" data-day="0" id="tab-0" aria-controls="panel-0" aria-selected="false">
+          <span class="habits-day-tab__name">Dom</span>
+          <span class="habits-day-tab__dots" id="dots-0" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <!-- Painéis de conteúdo (um por dia, gerados via JS) -->
+      <div id="habits-panels"></div>
+
+    </div>
+  </section>
+
+  <!-- ── Footer ── -->
+  <footer class="footer" id="page-footer">
+    Dashboard · PrograMaria Sprint IA
+  </footer>
+
+</main>
+
+<script>
+
+
+  // ── Hábitos semanais ──────────────────────────────────────────────────────
+  (function () {
+    const STORAGE_KEY = 'dashboard_habits_weekly';
+    const HABITS = [
+      { id: 'water',     emoji: '💧', label: 'Beber 2 L de água',      hint: 'Hidratação ao longo do dia' },
+      { id: 'sleep',     emoji: '😴', label: 'Boa noite de sono',       hint: '7–9 horas de descanso' },
+      { id: 'meditation',emoji: '🧘', label: 'Meditação',              hint: '10 minutos de atenção plena' },
+      { id: 'exercise',  emoji: '🏃', label: 'Exercício físico',        hint: 'Pelo menos 30 minutos' },
+      { id: 'reading',   emoji: '📚', label: 'Leitura ou aprendizado', hint: '15 min de algo que te evolui' },
+    ];
+    const TOTAL = HABITS.length; // 5 per day
+    const DAY_NAMES = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+    // ISO week number (Mon=1 ... Sun=7 mapped Mon=1..Sat=6,Sun=0)
+    function getISOWeek(d) {
+      const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+      const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+      return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    }
+
+    const now     = new Date();
+    const WEEK_ID = now.getFullYear() + '-W' + String(getISOWeek(now)).padStart(2,'0');
+    const TODAY_DOW = now.getDay(); // 0=Dom..6=Sáb
+
+    // Load state for this week
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return {};
+        const data = JSON.parse(raw);
+        return data.week === WEEK_ID ? (data.days || {}) : {};
+      } catch { return {}; }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ week: WEEK_ID, days: state }));
+    }
+
+    let state = loadState(); // { dayIndex: { habitId: bool } }
+
+    // ── Build panels ────────────────────────────────────────────────────────
+    function buildPanels() {
+      const container = document.getElementById('habits-panels');
+      // Tab order: 1,2,3,4,5,6,0 (Mon..Sun)
+      const tabOrder = [1,2,3,4,5,6,0];
+      tabOrder.forEach(dow => {
+        const panel = document.createElement('div');
+        panel.className = 'habits-panel';
+        panel.id = 'panel-' + dow;
+        panel.setAttribute('role', 'tabpanel');
+        panel.setAttribute('aria-labelledby', 'tab-' + dow);
+        panel.hidden = true;
+
+        // Progress bar
+        panel.innerHTML = `
+          <div class="habits-progress">
+            <div class="habits-progress__labels">
+              <span class="habits-progress__text">Progresso do dia</span>
+              <span class="habits-progress__count" id="count-${dow}" aria-live="polite">0 / ${TOTAL}</span>
+            </div>
+            <div class="habits-progress__track" role="progressbar"
+                 aria-valuemin="0" aria-valuemax="${TOTAL}" aria-valuenow="0"
+                 id="bar-${dow}">
+              <div class="habits-progress__fill" id="fill-${dow}"></div>
+            </div>
+          </div>
+          <ul class="habits-list" aria-label="Hábitos de ${DAY_NAMES[dow]}">
+            ${HABITS.map(h => `
+            <li class="habit-item" data-dow="${dow}" data-habit="${h.id}"
+                role="checkbox" aria-checked="false" tabindex="0">
+              <label style="display:contents;cursor:pointer">
+                <input type="checkbox"
+                       id="cb-${dow}-${h.id}"
+                       data-dow="${dow}"
+                       data-habit="${h.id}"
+                       aria-label="${h.label}" />
+                <span class="habit-item__box" aria-hidden="true">
+                  <svg viewBox="0 0 12 12"><polyline points="1.5,6 4.5,9.5 10.5,2.5"/></svg>
+                </span>
+              </label>
+              <span class="habit-item__emoji" aria-hidden="true">${h.emoji}</span>
+              <div class="habit-item__body">
+                <p class="habit-item__label">${h.label}</p>
+                <p class="habit-item__hint">${h.hint}</p>
+              </div>
+            </li>`).join('')}
+          </ul>`;
+
+        container.appendChild(panel);
+      });
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    function getDayState(dow) {
+      return state[dow] || {};
+    }
+
+    function doneCount(dow) {
+      return Object.values(getDayState(dow)).filter(Boolean).length;
+    }
+
+    function updateDayUI(dow) {
+      const done = doneCount(dow);
+      const pct  = Math.round((done / TOTAL) * 100);
+      const fillEl  = document.getElementById('fill-' + dow);
+      const countEl = document.getElementById('count-' + dow);
+      const barEl   = document.getElementById('bar-' + dow);
+      if (fillEl)  fillEl.style.width = pct + '%';
+      if (countEl) countEl.textContent = done + ' / ' + TOTAL;
+      if (barEl)   barEl.setAttribute('aria-valuenow', done);
+      updateDots(dow);
+      updateWeekTotal();
+    }
+
+    function updateDots(dow) {
+      const dotsEl = document.getElementById('dots-' + dow);
+      if (!dotsEl) return;
+      const done = doneCount(dow);
+      let html = '';
+      for (let i = 0; i < TOTAL; i++) {
+        html += `<span class="habits-dot${i < done ? ' habits-dot--done' : ''}"></span>`;
+      }
+      dotsEl.innerHTML = html;
+    }
+
+    function updateWeekTotal() {
+      let total = 0;
+      [0,1,2,3,4,5,6].forEach(d => { total += doneCount(d); });
+      const el = document.getElementById('habits-week-total');
+      if (el) el.textContent = total + ' / ' + (TOTAL * 7);
+    }
+
+    function updateSubtitle(dow) {
+      const done = doneCount(dow);
+      const sub = document.getElementById('habits-subtitle');
+      if (!sub) return;
+      if (dow !== TODAY_DOW) {
+        sub.textContent = DAY_NAMES[dow] + ' — ' + done + '/' + TOTAL + ' concluídos';
+      } else {
+        sub.textContent = done === TOTAL
+          ? '🎉 Todos os hábitos concluídos hoje!'
+          : 'Marque o que já fez hoje';
+      }
+    }
+
+    // ── Tab switching ────────────────────────────────────────────────────────
+    let activeDay = TODAY_DOW;
+
+    function activateTab(dow) {
+      activeDay = dow;
+      document.querySelectorAll('.habits-day-tab').forEach(btn => {
+        const d = parseInt(btn.dataset.day);
+        const isActive = d === dow;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+      });
+      document.querySelectorAll('.habits-panel').forEach(p => {
+        p.hidden = true;
+      });
+      const panel = document.getElementById('panel-' + dow);
+      if (panel) panel.hidden = false;
+      updateSubtitle(dow);
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    buildPanels();
+
+    // Mark today's tab
+    const todayTab = document.getElementById('tab-' + TODAY_DOW);
+    if (todayTab) todayTab.classList.add('is-today');
+
+    // Attach tab click
+    document.querySelectorAll('.habits-day-tab').forEach(btn => {
+      btn.addEventListener('click', () => activateTab(parseInt(btn.dataset.day)));
+    });
+
+    // Wire up all checkboxes
+    document.querySelectorAll('.habit-item input[type="checkbox"]').forEach(cb => {
+      const dow    = parseInt(cb.dataset.dow);
+      const hId    = cb.dataset.habit;
+      if (!state[dow]) state[dow] = {};
+      cb.checked = !!state[dow][hId];
+
+      // Sync li visual
+      const li = cb.closest('.habit-item');
+      li.classList.toggle('is-done', cb.checked);
+      li.setAttribute('aria-checked', String(cb.checked));
+
+      cb.addEventListener('change', () => {
+        if (!state[dow]) state[dow] = {};
+        state[dow][hId] = cb.checked;
+        li.classList.toggle('is-done', cb.checked);
+        li.setAttribute('aria-checked', String(cb.checked));
+        saveState();
+        updateDayUI(dow);
+        updateSubtitle(activeDay);
+      });
+    });
+
+    // Keyboard
+    document.querySelectorAll('.habit-item').forEach(li => {
+      li.addEventListener('keydown', e => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          li.querySelector('input[type="checkbox"]').click();
+        }
+      });
+    });
+
+    // Init all dots & progress
+    [0,1,2,3,4,5,6].forEach(d => updateDayUI(d));
+
+    // Open today's tab
+    activateTab(TODAY_DOW);
+  })();
+
+  // ── Google Auth + APIs ────────────────────────────────────────────────────
+  (function () {
+    const CLIENT_ID = '569762931795-odi1toi9kju9no2nt8ohu5udm0j906k8.apps.googleusercontent.com';
+    const SCOPES = [
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/tasks.readonly',
+      'profile',
+      'email',
+    ].join(' ');
+
+    let tokenClient;
+    let accessToken = null;
+
+    // ── UI helpers ───────────────────────────────────────────────────────
+    function setLoading(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('is-loading');
+    }
+
+    function setCardValue(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.remove('is-loading');
+      el.textContent = value;
+    }
+
+    function setSubText(id, text) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      // Preserve the dot span
+      const dot = el.querySelector('.card__sub-dot');
+      el.innerHTML = '';
+      if (dot) el.appendChild(dot);
+      el.insertAdjacentText('beforeend', ' ' + text);
+    }
+
+    function showProfile(profile) {
+      const slot    = document.getElementById('user-profile-slot');
+      const nameEl  = document.getElementById('user-name');
+      const phEl    = document.getElementById('user-avatar-placeholder');
+
+      if (slot)   slot.style.display = 'block';
+      if (nameEl) nameEl.textContent = profile.name || profile.email;
+      if (phEl) {
+        if (profile.picture) {
+          const img = document.createElement('img');
+          img.src = profile.picture;
+          img.alt = profile.name || '';
+          img.className = 'user-profile__avatar';
+          phEl.replaceWith(img);
+        } else {
+          phEl.textContent = (profile.name || 'U')[0].toUpperCase();
+        }
+      }
+    }
+
+    // ── Gmail ─────────────────────────────────────────────────────────────
+    async function fetchGmail() {
+      setLoading('email-count');
+      setSubText('email-sub', 'Carregando...');
+      try {
+        // q=newer_than:1d label:inbox category:primary filtra e-mails recebidos nas últimas 24h
+        // Usamos maxResults=1 e resultSizeEstimate para obter o número real de e-mails de forma rápida
+        const res = await fetch(
+          'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=newer_than:1d+label:inbox+category:primary&maxResults=1',
+          { headers: { Authorization: 'Bearer ' + accessToken } }
+        );
+        if (!res.ok) throw new Error('Gmail ' + res.status);
+        const data   = await res.json();
+        const count = data.resultSizeEstimate || 0;
+        setCardValue('email-count', count);
+
+        // Conta quantos desses também estão marcados como IMPORTANT
+        const res2 = await fetch(
+          'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=newer_than:1d+label:inbox+category:primary+is:important&maxResults=1',
+          { headers: { Authorization: 'Bearer ' + accessToken } }
+        );
+        if (res2.ok) {
+          const d2  = await res2.json();
+          const imp = d2.resultSizeEstimate || 0;
+          setSubText('email-sub', imp > 0
+            ? imp + ' marcado' + (imp === 1 ? '' : 's') + ' como importante'
+            : 'Nenhum marcado como importante');
+        } else {
+          setSubText('email-sub', count + ' nas últimas 24h');
+        }
+      } catch (err) {
+        setCardValue('email-count', '?');
+        setSubText('email-sub', 'Erro ao carregar');
+        console.error('Gmail error:', err);
+      }
+    }
+
+    // ── Google Calendar ───────────────────────────────────────────────────
+    function fmt2(n) { return String(n).padStart(2, '0'); }
+
+    async function fetchCalendar() {
+      setLoading('meeting-count');
+      try {
+        const now   = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+        const params = new URLSearchParams({
+          timeMin:      start.toISOString(),
+          timeMax:      end.toISOString(),
+          singleEvents: 'true',
+          orderBy:      'startTime',
+          maxResults:   '20',
+        });
+
+        const res = await fetch(
+          'https://www.googleapis.com/calendar/v3/calendars/primary/events?' + params,
+          { headers: { Authorization: 'Bearer ' + accessToken } }
+        );
+        if (!res.ok) throw new Error('Calendar ' + res.status);
+        const data  = await res.json();
+        const items = (data.items || []).filter(e => e.status !== 'cancelled');
+
+        setCardValue('meeting-count', items.length);
+
+        // Find next upcoming event
+        const upcoming = items.find(e => {
+          const t = e.start.dateTime ? new Date(e.start.dateTime) : null;
+          return t && t > now;
+        });
+
+        if (upcoming) {
+          const t   = new Date(upcoming.start.dateTime);
+          const hm  = fmt2(t.getHours()) + ':' + fmt2(t.getMinutes());
+          const title = upcoming.summary || 'Sem título';
+          setSubText('meeting-sub', 'Próxima às ' + hm + ' — ' + title);
+        } else if (items.length > 0) {
+          setSubText('meeting-sub', 'Todas as reuniões já aconteceram');
+        } else {
+          setSubText('meeting-sub', 'Nenhuma reunião agendada');
+        }
+
+        // Populate agenda list with real events
+        renderAgenda(items, now);
+
+      } catch (err) {
+        setCardValue('meeting-count', '?');
+        setSubText('meeting-sub', 'Erro ao carregar');
+        console.error('Calendar error:', err);
+      }
+    }
+
+    // ── Google Tasks ──────────────────────────────────────────────────────
+    async function fetchTasks() {
+      setLoading('task-count');
+      setSubText('task-sub', 'Carregando...');
+      try {
+        const res = await fetch(
+          'https://www.googleapis.com/tasks/v1/lists/@default/tasks?showCompleted=false&maxResults=100',
+          { headers: { Authorization: 'Bearer ' + accessToken } }
+        );
+        if (!res.ok) throw new Error('Tasks ' + res.status);
+        const data = await res.json();
+        const items = data.items || [];
+        setCardValue('task-count', items.length);
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const dueToday = items.filter(task => task.due && task.due.startsWith(todayStr)).length;
+
+        if (dueToday > 0) {
+          setSubText('task-sub', dueToday + ' com prazo hoje');
+        } else if (items.length > 0) {
+          setSubText('task-sub', items.length + ' tarefa' + (items.length !== 1 ? 's' : '') + ' pendente' + (items.length !== 1 ? 's' : ''));
+        } else {
+          setSubText('task-sub', 'Nenhuma tarefa pendente');
+        }
+
+        renderTasks(items);
+
+      } catch (err) {
+        setCardValue('task-count', '?');
+        setSubText('task-sub', 'Erro ao carregar');
+        console.error('Tasks error:', err);
+      }
+    }
+
+    // ── Render tasks list ─────────────────────────────────────────────────
+    function renderTasks(tasks) {
+      const list = document.querySelector('.tasks-actual-list');
+      const sub = document.querySelector('.tasks-list-subtitle');
+      const badge = document.querySelector('.tasks-list-badge');
+      if (!list) return;
+
+      if (tasks.length === 0) {
+        list.innerHTML = `<li style="padding:24px 0;color:var(--text-muted);font-size:14px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">🌸</span> Nenhuma tarefa pendente
+        </li>`;
+        if (sub) sub.textContent = 'Dados reais — tudo em dia!';
+        if (badge) badge.textContent = '0 tarefas';
+        return;
+      }
+
+      list.innerHTML = tasks.slice(0, 10).map(task => {
+        let dueStr = '';
+        if (task.due) {
+          const dUTC = new Date(task.due);
+          dueStr = fmt2(dUTC.getUTCDate()) + '/' + fmt2(dUTC.getUTCMonth() + 1);
+        }
+
+        const notes = task.notes ? task.notes.replace(/\n/g, ' ') : '';
+        const notesTruncated = notes.length > 60 ? notes.substring(0, 57) + '...' : notes;
+
+        return `<li class="agenda-item" style="border-bottom:1px solid var(--border);padding:14px 0;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="display:flex;align-items:center;gap:12px;flex:1">
+            <span style="font-size:18px;color:var(--accent-purple)">✓</span>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:14px;font-weight:500;color:var(--text-primary)">${task.title || 'Sem título'}</span>
+              ${notesTruncated ? `<span style="font-size:11px;color:var(--text-secondary)">${notesTruncated}</span>` : ''}
+            </div>
+          </div>
+          ${dueStr ? `<span style="font-size:11px;color:var(--accent-amber);background:rgba(245,158,11,0.1);padding:2px 8px;border-radius:4px;white-space:nowrap">${dueStr}</span>` : ''}
+        </li>`;
+      }).join('');
+
+      if (sub) sub.textContent = 'Dados reais';
+      if (badge) badge.textContent = tasks.length + (tasks.length !== 1 ? ' tarefas' : ' tarefa');
+    }
+
+
+
+    // ── Dynamic date ─────────────────────────────────────────────────────────
+    function updateHeaderDate() {
+      const el = document.getElementById('current-date');
+      if (!el) return;
+      const now = new Date();
+      const weekDays = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+      const months   = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+      const wd  = weekDays[now.getDay()];
+      const d   = now.getDate();
+      const m   = months[now.getMonth()];
+      const y   = now.getFullYear();
+      el.innerHTML = wd + ', <span>' + d + ' de ' + m + ' de ' + y + '</span>';
+    }
+
+    // ── Render real agenda ──────────────────────────────────────────────────
+    function renderAgenda(events, now) {
+      const list = document.querySelector('.agenda-list');
+      if (!list) return;
+
+      if (events.length === 0) {
+        list.innerHTML = `<li style="padding:24px 0;color:var(--text-muted);font-size:14px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">🌝</span> Nenhum evento agendado para hoje
+        </li>`;
+        const sub   = document.querySelector('.agenda-card__subtitle');
+        const badge = document.querySelector('.agenda-card__badge');
+        if (sub)   sub.textContent   = 'Dados reais — sem eventos hoje';
+        if (badge) badge.textContent = '0 eventos';
+        return;
+      }
+
+      list.innerHTML = events.slice(0, 6).map((ev, i) => {
+        const hasTime = !!ev.start.dateTime;
+        const start   = hasTime ? new Date(ev.start.dateTime) : null;
+        const end     = hasTime ? new Date(ev.end.dateTime)   : null;
+        const timeStr = start ? fmt2(start.getHours()) + ':' + fmt2(start.getMinutes()) : 'O dia todo';
+
+        let duration = '';
+        if (start && end) {
+          const mins = Math.round((end - start) / 60000);
+          duration = mins < 60 ? mins + ' min' : (mins / 60).toFixed(mins % 60 === 0 ? 0 : 1) + 'h';
+        }
+
+        let statusClass, statusLabel;
+        if (!hasTime) {
+          statusClass = 'status--scheduled'; statusLabel = 'Dia todo';
+        } else if (end < now) {
+          statusClass = 'status--done';      statusLabel = 'Encerrado';
+        } else if (start <= now && now < end) {
+          statusClass = 'status--now';       statusLabel = 'Agora';
+        } else {
+          const isFirst = events.filter(e => {
+            const s = e.start.dateTime ? new Date(e.start.dateTime) : null;
+            return s && s > now;
+          })[0] === ev;
+          statusClass = isFirst ? 'status--next' : 'status--scheduled';
+          statusLabel = isFirst ? 'Próximo'      : 'Agendado';
+        }
+
+        return `<li class="agenda-item" id="event-real-${i}">
+          <span class="agenda-item__time">${timeStr}</span>
+          <span class="agenda-item__cal-icon" aria-hidden="true">📅</span>
+          <div class="agenda-item__body">
+            <span class="agenda-item__title">${ev.summary || 'Sem título'}</span>
+            <span class="agenda-item__duration">${duration}</span>
+          </div>
+          <span class="agenda-item__status ${statusClass}">${statusLabel}</span>
+        </li>`;
+      }).join('');
+
+      const sub   = document.querySelector('.agenda-card__subtitle');
+      const badge = document.querySelector('.agenda-card__badge');
+      if (sub)   sub.textContent   = events.length + ' evento' + (events.length !== 1 ? 's' : '') + ' — dados reais';
+      if (badge) badge.textContent = events.length + (events.length !== 1 ? ' eventos' : ' evento');
+    }
+
+    // ── User profile from tokeninfo ─────────────────────────────────────────
+    async function fetchProfile() {
+      try {
+        const res  = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: 'Bearer ' + accessToken }
+        });
+        const data = await res.json();
+        showProfile({ name: data.name, email: data.email, picture: data.picture });
+      } catch (e) { console.warn('Profile fetch failed', e); }
+    }
+
+    // ── After login: fetch everything ───────────────────────────────────────
+    async function onLoginSuccess(token) {
+      accessToken = token;
+      // Hide overlay
+      document.getElementById('login-overlay').classList.add('is-hidden');
+      updateHeaderDate();
+      // Fetch all data in parallel
+      await Promise.all([fetchProfile(), fetchCalendar(), fetchTasks()]);
+    }
+
+    // ── Logout ───────────────────────────────────────────────────────────────
+    function logout() {
+      if (accessToken) {
+        google.accounts.oauth2.revoke(accessToken, () => {});
+        accessToken = null;
+      }
+      localStorage.removeItem('oauth_access_token');
+      localStorage.removeItem('oauth_expires_at');
+      localStorage.removeItem('oauth_logged_in');
+
+      document.getElementById('login-overlay').classList.remove('is-hidden');
+      document.getElementById('user-profile-slot').style.display = 'none';
+      // Reset cards to neutral (no fake numbers)
+      setCardValue('email-count',   '—');
+      setCardValue('meeting-count', '—');
+      setCardValue('task-count',    '—');
+      setSubText('email-sub',   'Entre para ver seus dados reais');
+      setSubText('meeting-sub', 'Entre para ver seus dados reais');
+      setSubText('task-sub',    'Entre para ver seus dados reais');
+      // Restore fake agenda
+      const list = document.querySelector('.agenda-list');
+      if (list) list.innerHTML = `<li style="padding:24px 0;color:var(--text-muted);font-size:14px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">🔒</span> Faça login para ver seus eventos reais
+      </li>`;
+      // Restore fake tasks list
+      const taskList = document.querySelector('.tasks-actual-list');
+      if (taskList) taskList.innerHTML = `<li style="padding:24px 0;color:var(--text-muted);font-size:14px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">🔒</span> Faça login para ver suas tarefas reais
+      </li>`;
+      const taskSub = document.querySelector('.tasks-list-subtitle');
+      if (taskSub) taskSub.textContent = 'Entre para ver suas tarefas';
+      const taskBadge = document.querySelector('.tasks-list-badge');
+      if (taskBadge) taskBadge.textContent = '— tarefas';
+    }
+
+    // ── Init GSI ───────────────────────────────────────────────────────────────
+    function initGSI() {
+      if (typeof google === 'undefined' || !google.accounts) {
+        setTimeout(initGSI, 300);
+        return;
+      }
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope:     SCOPES,
+        callback:  (resp) => {
+          if (resp.error) {
+            console.error('OAuth error:', resp);
+            return;
+          }
+          if (resp.access_token) {
+            localStorage.setItem('oauth_access_token', resp.access_token);
+            const expiresAt = Date.now() + (resp.expires_in || 3600) * 1000;
+            localStorage.setItem('oauth_expires_at', expiresAt);
+            localStorage.setItem('oauth_logged_in', 'true');
+          }
+          onLoginSuccess(resp.access_token);
+        },
+      });
+
+      // Check for saved session
+      const savedToken = localStorage.getItem('oauth_access_token');
+      const expiresAt = localStorage.getItem('oauth_expires_at');
+      const wasLoggedIn = localStorage.getItem('oauth_logged_in') === 'true';
+
+      if (savedToken && expiresAt && Date.now() < parseInt(expiresAt)) {
+        onLoginSuccess(savedToken);
+      } else if (wasLoggedIn) {
+        // Try to request a token silently (without prompting consent screen again)
+        setTimeout(() => {
+          tokenClient.requestAccessToken({ prompt: '' });
+        }, 100);
+      }
+
+      document.getElementById('btn-google-login').addEventListener('click', () => {
+        tokenClient.requestAccessToken({ prompt: '' });
+      });
+
+      document.getElementById('btn-logout').addEventListener('click', logout);
+      updateHeaderDate();
+    }
+
+    initGSI();
+  })();
+</script>
+
+</body>
+</html>
