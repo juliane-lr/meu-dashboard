@@ -64,7 +64,7 @@ O uso da IA fez parte da própria metodologia do projeto, com foco não apenas n
 
 ### Autenticação com Google
 
-A aplicação solicita autenticação para acessar os dados necessários do Calendar e Tasks.
+A aplicação utiliza autenticação Google para acessar os dados necessários do Calendar e Tasks. O acesso às integrações foi configurado de forma restrita, utilizando apenas uma conta previamente autorizada.
 
 ![Tela de autenticação com Google](docs/login-google.png)
 
@@ -86,7 +86,7 @@ O dashboard está publicado no GitHub Pages:
 
 https://juliane-lr.github.io/meu-dashboard/
 
-> Para consultar dados pessoais do Google Calendar e Google Tasks é necessário realizar a autenticação e autorizar os acessos solicitados pela aplicação.
+> **Observação:** a aplicação pode ser acessada publicamente, mas a autenticação com os serviços do Google está restrita a uma conta previamente autorizada. Por segurança, mantive apenas minha própria conta cadastrada para utilizar as integrações com Google Calendar e Google Tasks. As imagens acima demonstram o funcionamento da aplicação após a autenticação.
 
 ## 📁 Estrutura do projeto
 
